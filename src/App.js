@@ -530,4 +530,335 @@ const EVParlayCalculator = () => {
                   className="w-full p-2 border border-gray-300 rounded-md"
                 />
               </div>
-              <div className="text-
+              <div className="text-sm text-gray-600">
+                <p><strong>Recommended APIs:</strong></p>
+                <p>• <strong>The Odds API</strong> - Free tier available, covers major sportsbooks</p>
+                <p>• <strong>OpticOdds</strong> - Premium service with Pinnacle & OnyxOdds integration</p>
+                <p>• <strong>SportsData.io</strong> - Comprehensive odds with historical data</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sport Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Sport & Boost (Minimum 3 legs required)</label>
+          <div className="flex gap-4">
+            {['MLB', 'Tennis'].map(sportOption => (
+              <button
+                key={sportOption}
+                onClick={() => setSport(sportOption)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  sport === sportOption 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {sportOption} ({sportOption === 'MLB' ? '100%' : '25%'} boost - 3+ legs)
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Best Parlay Results */}
+        {bestParlay && (
+          <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Target className="w-5 h-5 text-purple-600" />
+              <h3 className="text-lg font-semibold text-purple-900">Auto-Generated Best 3-Leg Parlay</h3>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <div className="text-sm text-gray-600">Expected Value</div>
+                <div className={`text-xl font-bold ${bestParlay.result.isPositiveEV ? 'text-green-600' : 'text-red-600'}`}>
+                  {bestParlay.result.expectedValue > 0 ? '+' : ''}{bestParlay.result.expectedValue.toFixed(2)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">Boosted Odds</div>
+                <div className="text-xl font-bold text-purple-600">
+                  {bestParlay.result.boostedParlay > 0 ? '+' : ''}{bestParlay.result.boostedParlay}
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-xs text-gray-600 mb-3">
+              Analyzed {bestParlay.combinationsChecked} valid combinations from {getAllAvailableBets().length} available bets
+            </div>
+            
+            <div className="space-y-2">
+              {bestParlay.result.legs.map((leg, index) => (
+                <div key={index} className="flex justify-between items-center p-2 bg-white rounded text-sm">
+                  <div>
+                    <span className="font-medium">{leg.market}</span>
+                    <span className="text-gray-600 ml-2">- {leg.selection}</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span>Onyx: {leg.onyxOdds > 0 ? '+' : ''}{leg.onyxOdds}</span>
+                    <span>Pin: {leg.fairOdds > 0 ? '+' : ''}{leg.fairOdds}</span>
+                    <span className={leg.edge > 0 ? 'text-green-600' : 'text-red-600'}>
+                      {leg.edge}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Live Games */}
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Live Games & Odds</h2>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader className="w-6 h-6 animate-spin mr-2" />
+              <span>Fetching live odds from Pinnacle & OnyxOdds...</span>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {liveGames.map(game => (
+                <div key={game.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="font-semibold text-lg">
+                      {game.awayTeam} @ {game.homeTeam}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {new Date(game.startTime).toLocaleTimeString()}
+                    </div>
+                  </div>
+                  
+                  <div className="grid gap-3">
+                    {Object.entries(game.markets).map(([market, odds]) => (
+                      <div key={market} className="bg-gray-50 p-3 rounded">
+                        <div className="font-medium mb-2 capitalize flex items-center gap-2">
+                          {market.replace(/_/g, ' ')}
+                          {market.includes('winner_total') && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                              Correlation-Adjusted
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(odds.pinnacle).map(([side, pinnacleOdd]) => {
+                            const onyxOdd = odds.onyx[side];
+                            const edge = ((americanToDecimal(onyxOdd) / americanToDecimal(pinnacleOdd) - 1) * 100).toFixed(1);
+                            
+                            const displayName = side === 'home' ? game.homeTeam : 
+                                               side === 'away' ? game.awayTeam : 
+                                               side.includes('_') ? 
+                                                 `${side.includes('home') ? game.homeTeam : game.awayTeam} ${side.split('_').slice(1).join(' ')}` :
+                                                 side;
+                            
+                            return (
+                              <button
+                                key={side}
+                                onClick={() => addGameToParlay(game, market, side)}
+                                className="p-2 border border-gray-300 rounded hover:bg-blue-50 transition-colors text-left"
+                              >
+                                <div className="text-sm font-medium">
+                                  {displayName}
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span>P: {pinnacleOdd > 0 ? '+' : ''}{pinnacleOdd}</span>
+                                  <span>O: {onyxOdd > 0 ? '+' : ''}{onyxOdd}</span>
+                                  <span className={edge > 0 ? 'text-green-600' : 'text-red-600'}>
+                                    {edge}%
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Parlay Builder */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Parlay Builder ({legs.filter(leg => leg.pinnacleOdds && leg.onyxOdds).length}/3 minimum legs)
+            </h2>
+            <button
+              onClick={addLeg}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Manual Leg
+            </button>
+          </div>
+
+          {legs.map((leg, index) => (
+            <div key={leg.id} className="grid grid-cols-12 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+              <div className="col-span-1 flex items-center">
+                <span className="font-medium text-gray-600">{index + 1}</span>
+              </div>
+              
+              <div className="col-span-2">
+                <input
+                  type="text"
+                  value={leg.market}
+                  onChange={(e) => updateLeg(leg.id, 'market', e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="col-span-3">
+                <input
+                  type="text"
+                  placeholder="Selection"
+                  value={leg.selection}
+                  onChange={(e) => updateLeg(leg.id, 'selection', e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <input
+                  type="text"
+                  placeholder="Pinnacle"
+                  value={leg.pinnacleOdds}
+                  onChange={(e) => updateLeg(leg.id, 'pinnacleOdds', e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <input
+                  type="text"
+                  placeholder="OnyxOdds"
+                  value={leg.onyxOdds}
+                  onChange={(e) => updateLeg(leg.id, 'onyxOdds', e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="col-span-2 flex items-center justify-center">
+                {legs.length > 3 && (
+                  <button
+                    onClick={() => removeLeg(leg.id)}
+                    className="p-2 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Calculate Button */}
+        <div className="mb-6">
+          <button
+            onClick={calculateParlay}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <TrendingUp className="w-5 h-5" />
+            Calculate +EV
+          </button>
+        </div>
+
+        {/* Results */}
+        {results && (
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h3 className="text-xl font-semibold mb-4">Analysis Results</h3>
+            
+            {/* Correlation Warnings */}
+            {results.correlationWarnings && results.correlationWarnings.length > 0 && (
+              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Market-Based Correlation Detected</h4>
+                {results.correlationWarnings.map((warning, index) => (
+                  <div key={index} className="text-sm text-yellow-700 mb-1">
+                    Same game: {warning.markets.join(' + ')} - Fair odds reduced by {warning.adjustment}%
+                  </div>
+                ))}
+                <div className="text-xs text-yellow-600 mt-2">
+                  Adjustments based on analysis of Pinnacle's Winner/Total markets vs individual leg pricing
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="font-medium">Original Parlay:</span>
+                  <span>{results.originalParlay > 0 ? '+' : ''}{results.originalParlay}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">With {results.boostUsed}% Boost:</span>
+                  <span className="font-semibold text-blue-600">
+                    {results.boostedParlay > 0 ? '+' : ''}{results.boostedParlay}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Fair Value (Correlation-Adj):</span>
+                  <span>{results.fairParlay > 0 ? '+' : ''}{results.fairParlay}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Legs Used:</span>
+                  <span>{results.legCount}/3+ required</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-center">
+                <div className={`text-center p-4 rounded-lg ${
+                  results.isPositiveEV 
+                    ? 'bg-green-100 border-2 border-green-500' 
+                    : 'bg-red-100 border-2 border-red-500'
+                }`}>
+                  <div className="text-sm font-medium text-gray-600 mb-1">Expected Value</div>
+                  <div className={`text-2xl font-bold ${
+                    results.isPositiveEV ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {results.expectedValue > 0 ? '+' : ''}{typeof results.expectedValue === 'number' ? results.expectedValue.toFixed(2) : results.expectedValue}%
+                  </div>
+                  <div className="text-sm font-medium mt-1">
+                    {results.isPositiveEV ? '✅ POSITIVE EV' : '❌ NEGATIVE EV'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Leg Breakdown */}
+            <div className="border-t pt-4">
+              <h4 className="font-semibold mb-3">Leg Breakdown</h4>
+              <div className="space-y-2">
+                {results.legs.map((leg, index) => (
+                  <div key={index} className="flex justify-between items-center p-2 bg-white rounded">
+                    <div className="flex-1">
+                      <span className="font-medium">{leg.market}</span>
+                      {leg.selection && <span className="text-gray-600 ml-2">- {leg.selection}</span>}
+                    </div>
+                    <div className="flex gap-4 text-sm">
+                      <span>Onyx: {leg.onyxOdds > 0 ? '+' : ''}{leg.onyxOdds}</span>
+                      <span>Pin: {leg.fairOdds > 0 ? '+' : ''}{leg.fairOdds}</span>
+                      <span className={leg.edge > 0 ? 'text-green-600' : 'text-red-600'}>
+                        Edge: {leg.edge}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-6 text-center text-sm text-gray-600">
+        <p>Live odds from Pinnacle (sharp) & OnyxOdds • Market-based correlation adjustments</p>
+        <p>Configure API keys above for real-time data • Demo mode active</p>
+        <p>Correlation factors derived from analysis of Pinnacle's Winner/Total vs individual leg pricing</p>
+        <p>Pre-correlated markets (Winner/Total) use actual market odds - no additional adjustment needed</p>
+      </div>
+    </div>
+  );
+};
+
+export default EVParlayCalculator;
