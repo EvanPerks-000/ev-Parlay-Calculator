@@ -1,36 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, TrendingUp, Plus, Trash2, RefreshCw, Download, Loader, Zap, Target, Edit3, Save, X, ExternalLink } from 'lucide-react';
+import { Calculator, TrendingUp, Plus, Trash2, RefreshCw, Download, Loader, Zap, Target, ExternalLink } from 'lucide-react';
 
-// Default sportsbook boost configurations
-const DEFAULT_SPORTSBOOK_BOOSTS = {
+// OnyxOdds boost configuration
+const ONYXODDS_BOOSTS = {
   onyx: {
     name: 'OnyxOdds',
     oddsProvider: 'draftkings', // DraftKings provides OnyxOdds odds
     boosts: {
       MLB: { percentage: 100, requirement: '3+ legs, 2+ from same game', minLegs: 3, sameGame: true },
-      Tennis: { percentage: 25, requirement: '3+ legs, mixed games', minLegs: 3, sameGame: false }
+      Tennis: { percentage: 25, requirement: '3+ legs, mixed games, +200 odds minimum', minLegs: 3, sameGame: false, minOdds: 200 },
+      UFC: { percentage: 100, requirement: '3+ legs, +200 odds minimum', minLegs: 3, sameGame: false, minOdds: 200 }
     },
-    color: 'purple',
-    lastUpdated: null
-  },
-  draftkings: {
-    name: 'DraftKings',
-    oddsProvider: 'draftkings',
-    boosts: {
-      MLB: { percentage: 50, requirement: '4+ legs', minLegs: 4, sameGame: false },
-      NFL: { percentage: 100, requirement: '3+ legs, same game', minLegs: 3, sameGame: true }
-    },
-    color: 'green',
-    lastUpdated: null
-  },
-  fanduel: {
-    name: 'FanDuel', 
-    oddsProvider: 'fanduel',
-    boosts: {
-      NBA: { percentage: 30, requirement: '3+ legs', minLegs: 3, sameGame: false }
-    },
-    color: 'blue',
-    lastUpdated: null
+    color: 'purple'
   }
 };
 
@@ -58,7 +39,7 @@ const generateRealisticCorrelatedOdds = (baseML, multiplier) => {
   }
 };
 
-const transformOddsApiData = (apiData, sport, selectedBook, sportsbookBoosts) => {
+const transformOddsApiData = (apiData, sport, selectedBook, onyxBoosts) => {
   const transformedGames = [];
   
   apiData.forEach((game, index) => {
@@ -70,7 +51,7 @@ const transformOddsApiData = (apiData, sport, selectedBook, sportsbookBoosts) =>
     );
     
     // Use the specific book that offers the boost
-    const bookConfig = sportsbookBoosts[selectedBook];
+    const bookConfig = onyxBoosts[selectedBook];
     const boostedBookData = game.bookmakers.find(book => 
       book.key === bookConfig.oddsProvider || book.title.toLowerCase().includes(bookConfig.oddsProvider)
     );
@@ -167,7 +148,7 @@ const transformOddsApiData = (apiData, sport, selectedBook, sportsbookBoosts) =>
           }
         }
 
-      } else if (sport === 'Tennis') {
+      } else if (sport === 'Tennis' || sport === 'UFC') {
         const pinnacleH2H = pinnacleData.markets.find(m => m.key === 'h2h');
         const boostedH2H = boostedBookData.markets.find(m => m.key === 'h2h');
         
@@ -213,14 +194,8 @@ const EVParlayCalculator = () => {
   const [bestParlay, setBestParlay] = useState(null);
   const [autoCalculating, setAutoCalculating] = useState(false);
 
-  // Boost management state
-  const [sportsbookBoosts, setSportsbookBoosts] = useState(DEFAULT_SPORTSBOOK_BOOSTS);
-  const [showBoostEditor, setShowBoostEditor] = useState(false);
-  const [editingBoosts, setEditingBoosts] = useState({});
-  const [selectedBookForEdit, setSelectedBookForEdit] = useState('onyx');
-
   // Get current boost configuration
-  const currentBookConfig = sportsbookBoosts[selectedBook];
+  const currentBookConfig = ONYXODDS_BOOSTS[selectedBook];
   const currentBoost = currentBookConfig?.boosts?.[sport];
   const boostPercentage = currentBoost?.percentage || 0;
 
@@ -256,12 +231,14 @@ const EVParlayCalculator = () => {
         if (!sportKey) {
           throw new Error('No active tennis tournaments found. Tennis is tournament-specific and may be out of season.');
         }
+      } else if (sport === 'UFC') {
+        sportKey = 'mma_mixed_martial_arts';
       } else {
         throw new Error(`Sport ${sport} not configured for live odds yet.`);
       }
       
       const markets = sport === 'MLB' ? 'h2h,spreads,totals' : 'h2h';
-      const bookConfig = sportsbookBoosts[selectedBook];
+      const bookConfig = ONYXODDS_BOOSTS[selectedBook];
       
       console.log(`🔥 Fetching LIVE odds for ${sport} (${sportKey}) from The Odds API (${bookConfig.name})...`);
       
@@ -292,7 +269,7 @@ const EVParlayCalculator = () => {
       }
       
       // Transform real API data to our format
-      const transformedGames = transformOddsApiData(data, sport, selectedBook, sportsbookBoosts);
+      const transformedGames = transformOddsApiData(data, sport, selectedBook, ONYXODDS_BOOSTS);
       
       if (transformedGames.length === 0) {
         throw new Error(`No games with both Pinnacle and ${bookConfig.name} data found`);
@@ -316,7 +293,7 @@ const EVParlayCalculator = () => {
       }
       
       alert(`Live Odds Error: ${errorMessage}\n\nUsing demo data as fallback.`);
-      setLiveGames(simulateOddsData());
+      setLiveGames(simulateOddsData(sport));
       
       // Still try to auto-generate with demo data
       setTimeout(() => {
@@ -328,8 +305,10 @@ const EVParlayCalculator = () => {
   };
 
   // Simulated data (fallback only)
-  const simulateOddsData = () => {
-    if (sport === 'MLB') {
+  const simulateOddsData = (selectedSport = sport) => {
+    console.log(`🎾 Generating demo data for: ${selectedSport}`);
+    
+    if (selectedSport === 'MLB') {
       return [
         {
           id: 'demo_mlb_1',
@@ -354,24 +333,54 @@ const EVParlayCalculator = () => {
           }
         }
       ];
-    } else if (sport === 'Tennis') {
+    } else if (selectedSport === 'Tennis') {
       return [
         {
           id: 'demo_tennis_1',
           homeTeam: 'Novak Djokovic',
-          awayTeam: 'Carlos Alcaraz',
+          awayTeam: 'Alexandre Muller',
           startTime: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
           markets: {
-            moneyline: { pinnacle: { home: +120, away: -140 }, boosted: { home: +125, away: -135 } }
+            moneyline: { pinnacle: { home: -5000, away: +2000 }, boosted: { home: -5000, away: +2100 } }
           }
         },
         {
           id: 'demo_tennis_2',
-          homeTeam: 'Iga Swiatek',
-          awayTeam: 'Aryna Sabalenka',
+          homeTeam: 'Beibit Zhukayev',
+          awayTeam: 'Flavio Cobolli',
           startTime: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
           markets: {
-            moneyline: { pinnacle: { home: -110, away: -110 }, boosted: { home: -105, away: -105 } }
+            moneyline: { pinnacle: { home: +266, away: -320 }, boosted: { home: +260, away: -310 } }
+          }
+        },
+        {
+          id: 'demo_tennis_3',
+          homeTeam: 'Quentin Halys',
+          awayTeam: 'August Holmgren',
+          startTime: new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: -832, away: +580 }, boosted: { home: -800, away: +600 } }
+          }
+        }
+      ];
+    } else if (selectedSport === 'UFC') {
+      return [
+        {
+          id: 'demo_ufc_1',
+          homeTeam: 'Jon Jones',
+          awayTeam: 'Tom Aspinall',
+          startTime: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: +250, away: -280 }, boosted: { home: +260, away: -270 } }
+          }
+        },
+        {
+          id: 'demo_ufc_2',
+          homeTeam: 'Islam Makhachev',
+          awayTeam: 'Arman Tsarukyan',
+          startTime: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: +180, away: -200 }, boosted: { home: +190, away: -190 } }
           }
         }
       ];
@@ -422,7 +431,7 @@ const EVParlayCalculator = () => {
   };
 
   const validateBoostRequirement = (legs, sport, selectedBook) => {
-    const bookConfig = sportsbookBoosts[selectedBook];
+    const bookConfig = ONYXODDS_BOOSTS[selectedBook];
     const boostConfig = bookConfig?.boosts?.[sport];
     
     if (!boostConfig) return true; // No specific requirements
@@ -431,6 +440,15 @@ const EVParlayCalculator = () => {
     
     // Check minimum legs
     if (filledLegs.length < boostConfig.minLegs) return false;
+    
+    // Check minimum odds requirement (for UFC and Tennis)
+    if (boostConfig.minOdds) {
+      const hasMinOdds = filledLegs.some(leg => {
+        const odds = parseInt(leg.boostedOdds);
+        return odds >= boostConfig.minOdds;
+      });
+      if (!hasMinOdds) return false;
+    }
     
     // Check same-game requirement
     if (boostConfig.sameGame) {
@@ -467,23 +485,30 @@ const EVParlayCalculator = () => {
   const calculateCorrelationAdjustment = (correlatedBets) => {
     const marketTypes = correlatedBets.map(bet => bet.marketType);
     
+    // Only apply correlation for same-game markets
+    const gameIds = [...new Set(correlatedBets.map(bet => bet.gameId))];
+    if (gameIds.length > 1) {
+      return 1.0; // No correlation between different games
+    }
+    
+    // Apply correlation adjustments for same-game parlays
     if (marketTypes.includes('moneyline') && marketTypes.includes('total')) {
-      return 0.97;
+      return 0.85; // Stronger correlation penalty
     }
     
     if (marketTypes.includes('moneyline') && marketTypes.includes('runline')) {
-      return 0.95;
+      return 0.80; // Strong correlation penalty
     }
     
     if (marketTypes.includes('runline') && marketTypes.includes('total')) {
-      return 0.96;
+      return 0.90; // Moderate correlation penalty
     }
     
     if (marketTypes.some(market => market.includes('winner_total'))) {
-      return 1.0;
+      return 1.0; // Already priced with correlation
     }
     
-    return 1.0;
+    return 1.0; // No correlation adjustment needed
   };
 
   const calculateParlayEV = (bets) => {
@@ -498,35 +523,55 @@ const EVParlayCalculator = () => {
       const boostedDecimal = americanToDecimal(bet.boostedOdds);
       
       parlayDecimal *= boostedDecimal;
-      
-      const correlatedGroup = correlationGroups.find(group => 
-        group.some(groupBet => groupBet.gameId === bet.gameId && group.length > 1)
-      );
-      
-      if (correlatedGroup && correlatedGroup.length > 1) {
-        const adjustment = calculateCorrelationAdjustment(correlatedGroup);
-        const adjustedFairDecimal = fairDecimal * adjustment;
-        fairParlayDecimal *= adjustedFairDecimal;
+      fairParlayDecimal *= fairDecimal;
+    });
+
+    // Apply correlation adjustments to FAIR odds only (not boosted odds)
+    let correlationAdjustment = 1.0;
+    correlationGroups.forEach(group => {
+      if (group.length > 1) {
+        const adjustment = calculateCorrelationAdjustment(group);
+        correlationAdjustment *= adjustment;
         
-        if (!correlationWarnings.some(w => w.gameId === bet.gameId)) {
-          correlationWarnings.push({
-            gameId: bet.gameId,
-            markets: correlatedGroup.map(b => b.marketType),
-            adjustment: ((1 - adjustment) * 100).toFixed(1),
-            note: "Based on market analysis of Winner/Total pricing vs individual legs"
-          });
-        }
-      } else {
-        fairParlayDecimal *= fairDecimal;
+        correlationWarnings.push({
+          gameId: group[0].gameId,
+          markets: group.map(b => b.marketType),
+          adjustment: ((1 - adjustment) * 100).toFixed(1),
+          note: "Based on market analysis of Winner/Total pricing vs individual legs"
+        });
       }
     });
 
-    const boostedParlayDecimal = parlayDecimal * (1 + boostPercentage / 100);
-    const ev = ((boostedParlayDecimal / fairParlayDecimal - 1) * 100);
+    // Apply correlation adjustment to fair parlay only
+    fairParlayDecimal *= correlationAdjustment;
+
+    // Convert parlay decimal to American odds
+    const originalParlayAmerican = decimalToAmerican(parlayDecimal);
+    
+    // Apply OnyxOdds boost method: add percentage directly to American odds
+    let boostedParlayAmerican;
+    if (originalParlayAmerican > 0) {
+      // For positive odds: add the percentage directly
+      boostedParlayAmerican = Math.round(originalParlayAmerican + (originalParlayAmerican * boostPercentage / 100));
+    } else {
+      // For negative odds: reduce the magnitude
+      const boostedDecimal = parlayDecimal * (1 + boostPercentage / 100);
+      boostedParlayAmerican = decimalToAmerican(boostedDecimal);
+    }
+    
+    // Calculate EV using the boosted American odds
+    const boostedDecimal = americanToDecimal(boostedParlayAmerican);
+    const ev = ((boostedDecimal / fairParlayDecimal - 1) * 100);
+    
+    console.log(`🔢 Parlay Calculation Debug:
+    Base Parlay: ${originalParlayAmerican}
+    Boost: ${boostPercentage}%
+    Boosted: ${boostedParlayAmerican}
+    Expected Boosted: ${originalParlayAmerican > 0 ? originalParlayAmerican + Math.round(originalParlayAmerican * boostPercentage / 100) : 'N/A'}`);
     
     return {
-      originalParlay: decimalToAmerican(parlayDecimal),
-      boostedParlay: decimalToAmerican(boostedParlayDecimal),
+      originalParlay: originalParlayAmerican,
+      boostedParlay: boostedParlayAmerican,
       fairParlay: decimalToAmerican(fairParlayDecimal),
       expectedValue: ev,
       isPositiveEV: ev > 0,
@@ -544,12 +589,16 @@ const EVParlayCalculator = () => {
   const findBestParlay = async () => {
     setAutoCalculating(true);
     
+    console.log(`🔍 Finding best parlay for ${sport} with ${liveGames.length} available games`);
+    
     const allBets = getAllAvailableBets();
     if (allBets.length < 3) {
       alert('Not enough betting options available to create a 3-leg parlay.');
       setAutoCalculating(false);
       return;
     }
+
+    console.log(`📊 Found ${allBets.length} total betting options for ${sport}`);
 
     let bestEV = -Infinity;
     let bestCombination = null;
@@ -644,7 +693,7 @@ const EVParlayCalculator = () => {
     
     if (!validateBoostRequirement(filledLegs, sport, selectedBook)) {
       const boostConfig = currentBoost;
-      alert(`${currentBookConfig.name} ${sport} boost requires: ${boostConfig.requirement}`);
+      alert(`OnyxOdds ${sport} boost requires: ${boostConfig.requirement}${boostConfig.minOdds ? ` • +${boostConfig.minOdds} odds minimum` : ''}`);
       return;
     }
 
@@ -694,43 +743,22 @@ const EVParlayCalculator = () => {
     ));
   };
 
-  // Boost management functions
-  const updateBoosts = (bookKey, newBoosts) => {
-    const updated = {
-      ...sportsbookBoosts,
-      [bookKey]: {
-        ...sportsbookBoosts[bookKey],
-        boosts: newBoosts,
-        lastUpdated: new Date().toISOString()
-      }
-    };
-    setSportsbookBoosts(updated);
-  };
-
-  const openBoostEditor = (bookKey) => {
-    setSelectedBookForEdit(bookKey);
-    setEditingBoosts({ ...sportsbookBoosts[bookKey].boosts });
-    setShowBoostEditor(true);
-  };
-
-  const saveBoostEdits = () => {
-    updateBoosts(selectedBookForEdit, editingBoosts);
-    setShowBoostEditor(false);
-    setEditingBoosts({});
-  };
-
-  const addNewSport = () => {
-    const sport = prompt('Enter sport name (e.g., NFL, NBA, NHL):');
-    if (sport && sport.trim()) {
-      setEditingBoosts({
-        ...editingBoosts,
-        [sport.trim()]: {
-          percentage: 0,
-          requirement: '3+ legs',
-          minLegs: 3,
-          sameGame: false
-        }
-      });
+  const openOnyxOdds = (betDetails = null) => {
+    // Open OnyxOdds in a new tab
+    const onyxUrl = 'https://app.onyxodds.com';
+    window.open(onyxUrl, '_blank');
+    
+    // If bet details are provided, show them in a modal for easy reference
+    if (betDetails) {
+      setTimeout(() => {
+        const betText = betDetails.legs.map((leg, index) => 
+          `${index + 1}. ${leg.selection} (${leg.boostedOdds > 0 ? '+' : ''}${leg.boostedOdds})`
+        ).join('\n');
+        
+        const message = `🎯 ONYXODDS BET DETAILS\n\n${betText}\n\n✅ Boost: ${betDetails.boostUsed}%\n💰 Expected Value: ${betDetails.expectedValue > 0 ? '+' : ''}${betDetails.expectedValue.toFixed(2)}%\n🎰 Final Odds: ${betDetails.boostedParlay > 0 ? '+' : ''}${betDetails.boostedParlay}\n\nOnyxOdds is now open in a new tab. Search for these games and add the selections to your betslip!`;
+        
+        alert(message);
+      }, 1000);
     }
   };
 
@@ -743,6 +771,14 @@ const EVParlayCalculator = () => {
       }, 1000);
     }
   }, [liveGames]);
+
+  // Reset best parlay when sport changes
+  useEffect(() => {
+    console.log(`🏈 Sport changed to: ${sport}`);
+    setBestParlay(null);
+    setResults(null);
+    setLiveGames([]); // Clear games so user needs to refresh for new sport
+  }, [sport]);
 
   // Get available sports for selected book
   const availableSports = currentBookConfig ? Object.keys(currentBookConfig.boosts) : [];
@@ -757,7 +793,7 @@ const EVParlayCalculator = () => {
               <h1 className="text-3xl font-bold text-gray-900">+EV Parlay Finder</h1>
               <div className="flex gap-2 mt-1">
                 <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">LIVE ODDS</span>
-                <span className="text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded">MANUAL BOOST UPDATES</span>
+                <span className="text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded">ONYXODDS BOOSTS</span>
               </div>
             </div>
           </div>
@@ -813,213 +849,33 @@ const EVParlayCalculator = () => {
           </div>
         )}
 
-        {/* Sportsbook Selection */}
+        {/* OnyxOdds Information */}
         <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-medium text-gray-700">Sportsbook & Boost</label>
-            <button
-              onClick={() => setShowBoostEditor(true)}
-              className="flex items-center gap-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-            >
-              <Edit3 className="w-4 h-4" />
-              Update Boosts
-            </button>
-          </div>
-          <div className="flex gap-4 mb-4">
-            {Object.entries(sportsbookBoosts).map(([key, config]) => {
-              const boostCount = Object.keys(config.boosts).length;
-              const lastUpdated = config.lastUpdated ? new Date(config.lastUpdated).toLocaleDateString() : 'Never';
-              
-              return (
-                <div key={key} className="relative">
-                  <button
-                    onClick={() => setSelectedBook(key)}
-                    className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                      selectedBook === key 
-                        ? `bg-${config.color}-600 text-white` 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <div className="text-lg">{config.name}</div>
-                    <div className="text-xs opacity-75">
-                      {boostCount} sport{boostCount !== 1 ? 's' : ''}
-                    </div>
-                    <div className="text-xs opacity-60">
-                      Updated: {lastUpdated}
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => openBoostEditor(key)}
-                    className="absolute -top-1 -right-1 w-6 h-6 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-colors flex items-center justify-center"
-                    title="Edit boosts"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Quick OnyxOdds Link */}
-          {selectedBook === 'onyx' && (
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-purple-800">Check Current OnyxOdds Boosts</p>
-                  <p className="text-xs text-purple-600">Copy boost info from their website and update here</p>
-                </div>
-                <a
-                  href="https://onyxodds.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-purple-800 mb-1">OnyxOdds Boost Calculator</h2>
+                <p className="text-sm text-purple-600">Finding +EV opportunities with OnyxOdds boosts vs Pinnacle sharp odds</p>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-purple-800">{availableSports.length} Sports Available</div>
+                <div className="text-sm text-purple-600 mb-2">MLB • Tennis • UFC</div>
+                <button
+                  onClick={() => openOnyxOdds()}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Visit OnyxOdds
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Boost Editor Modal */}
-        {showBoostEditor && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">
-                  Update {sportsbookBoosts[selectedBookForEdit]?.name} Boosts
-                </h3>
-                <button
-                  onClick={() => setShowBoostEditor(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <X className="w-5 h-5" />
+                  Open OnyxOdds
                 </button>
-              </div>
-              
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-2">📋 How to Update Boosts</h4>
-                <div className="text-sm text-blue-700 space-y-1">
-                  <p>1. Visit the sportsbook website</p>
-                  <p>2. Look for boost banners (usually at the top)</p>
-                  <p>3. Copy the boost percentage and requirements</p>
-                  <p>4. Update the information below</p>
-                  <p>5. Save to apply the new boosts</p>
-                </div>
-              </div>
-
-              <div className="space-y-4 mb-6">
-                {Object.entries(editingBoosts).map(([sport, boost]) => (
-                  <div key={sport} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="font-medium text-lg">{sport}</h4>
-                      <button
-                        onClick={() => {
-                          const newBoosts = { ...editingBoosts };
-                          delete newBoosts[sport];
-                          setEditingBoosts(newBoosts);
-                        }}
-                        className="p-1 text-red-600 hover:bg-red-100 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Boost Percentage</label>
-                        <input
-                          type="number"
-                          value={boost.percentage}
-                          onChange={(e) => setEditingBoosts({
-                            ...editingBoosts,
-                            [sport]: { ...boost, percentage: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          placeholder="100"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Minimum Legs</label>
-                        <input
-                          type="number"
-                          value={boost.minLegs}
-                          onChange={(e) => setEditingBoosts({
-                            ...editingBoosts,
-                            [sport]: { ...boost, minLegs: parseInt(e.target.value) || 3 }
-                          })}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          placeholder="3"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="mt-3">
-                      <label className="block text-sm font-medium mb-1">Requirements</label>
-                      <input
-                        type="text"
-                        value={boost.requirement}
-                        onChange={(e) => setEditingBoosts({
-                          ...editingBoosts,
-                          [sport]: { ...boost, requirement: e.target.value }
-                        })}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        placeholder="3+ legs, 2+ from same game"
-                      />
-                    </div>
-                    
-                    <div className="mt-3">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={boost.sameGame}
-                          onChange={(e) => setEditingBoosts({
-                            ...editingBoosts,
-                            [sport]: { ...boost, sameGame: e.target.checked }
-                          })}
-                          className="rounded"
-                        />
-                        <span className="text-sm">Requires same-game legs</span>
-                      </label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-3 justify-between">
-                <button
-                  onClick={addNewSport}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Sport
-                </button>
-                
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowBoostEditor(false)}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={saveBoostEdits}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save Boosts
-                  </button>
-                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Sport Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Available {currentBookConfig?.name} Boosts
+            Available OnyxOdds Boosts
           </label>
           <div className="flex gap-4">
             {availableSports.map(sportOption => {
@@ -1030,13 +886,16 @@ const EVParlayCalculator = () => {
                   onClick={() => setSport(sportOption)}
                   className={`px-4 py-3 rounded-lg font-medium transition-colors ${
                     sport === sportOption 
-                      ? 'bg-blue-600 text-white' 
+                      ? 'bg-purple-600 text-white' 
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
                   <div className="text-lg">{sportOption}</div>
                   <div className="text-sm opacity-90">{boostConfig.percentage}% boost</div>
                   <div className="text-xs opacity-75">{boostConfig.requirement}</div>
+                  {boostConfig.minOdds && (
+                    <div className="text-xs opacity-75 mt-1">+{boostConfig.minOdds} odds min</div>
+                  )}
                 </button>
               );
             })}
@@ -1045,20 +904,30 @@ const EVParlayCalculator = () => {
 
         {/* Current Boost Info */}
         {currentBoost && (
-          <div className={`mb-6 p-4 bg-${currentBookConfig.color}-50 border border-${currentBookConfig.color}-200 rounded-lg`}>
-            <h3 className={`font-semibold text-${currentBookConfig.color}-800 mb-2`}>
-              📈 {currentBookConfig.name} {sport} Boost: {currentBoost.percentage}%
+          <div className={`mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg`}>
+            <h3 className={`font-semibold text-purple-800 mb-2`}>
+              📈 OnyxOdds {sport} Boost: {currentBoost.percentage}%
             </h3>
-            <p className={`text-sm text-${currentBookConfig.color}-700`}>
+            <p className={`text-sm text-purple-700`}>
               Requirements: {currentBoost.requirement}
             </p>
+            {currentBoost.minOdds && (
+              <p className="text-sm text-purple-700">
+                Minimum odds: +{currentBoost.minOdds} (at least one leg must meet this)
+              </p>
+            )}
             <p className="text-xs text-gray-600 mt-1">
               Odds Provider: {currentBookConfig.oddsProvider} • Comparing vs Pinnacle sharp odds
             </p>
             {sport === 'Tennis' && (
               <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">
                 🎾 <strong>Tennis Note:</strong> Tennis odds are tournament-specific and may not be available year-round. 
-                The API automatically finds active tennis tournaments, but availability depends on the current tennis season.
+                At least one leg must have odds of +{currentBoost.minOdds} or higher to qualify for the boost.
+              </div>
+            )}
+            {sport === 'UFC' && (
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                🥊 <strong>UFC Note:</strong> At least one leg must have odds of +{currentBoost.minOdds} or higher to qualify for the boost.
               </div>
             )}
           </div>
@@ -1070,7 +939,7 @@ const EVParlayCalculator = () => {
             <div className="flex items-center gap-2 mb-4">
               <Target className="w-6 h-6 text-purple-600" />
               <h2 className="text-2xl font-bold text-purple-900">
-                🎯 BEST {currentBookConfig?.name} {sport} BET
+                🎯 BEST ONYXODDS {sport} BET
               </h2>
               <span className="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium">
                 AUTO-GENERATED
@@ -1108,7 +977,7 @@ const EVParlayCalculator = () => {
                       <span className="text-gray-600 ml-2">- {leg.selection}</span>
                     </div>
                     <div className="flex gap-4 text-sm">
-                      <span className="font-medium">{currentBookConfig?.name}: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
+                      <span className="font-medium">OnyxOdds: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
                       <span>Pin: {leg.fairOdds > 0 ? '+' : ''}{leg.fairOdds}</span>
                       <span className={`font-bold ${leg.edge > 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {leg.edge}% edge
@@ -1116,6 +985,26 @@ const EVParlayCalculator = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+              
+              {/* Bet Now Button */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => openOnyxOdds({
+                    legs: bestParlay.result.legs,
+                    boostUsed: currentBoost?.percentage || 0,
+                    expectedValue: bestParlay.result.expectedValue,
+                    boostedParlay: bestParlay.result.boostedParlay
+                  })}
+                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-bold hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <span className="text-xl">🎯</span>
+                  <span>BET NOW ON ONYXODDS</span>
+                  <span className="text-xl">💰</span>
+                </button>
+                <p className="text-xs text-center text-gray-600 mt-2">
+                  Opens OnyxOdds in new tab with bet details for easy placement
+                </p>
               </div>
             </div>
             
@@ -1144,13 +1033,13 @@ const EVParlayCalculator = () => {
           <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
             Live Games & Odds 
             <span className="text-sm bg-red-100 text-red-800 px-2 py-1 rounded">
-              LIVE {currentBookConfig?.name.toUpperCase()} vs PINNACLE
+              LIVE ONYXODDS vs PINNACLE
             </span>
           </h2>
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader className="w-6 h-6 animate-spin mr-2" />
-              <span>Fetching live odds from {currentBookConfig?.name} vs Pinnacle...</span>
+              <span>Fetching live odds from OnyxOdds vs Pinnacle...</span>
             </div>
           ) : liveGames.length > 0 ? (
             <div className="grid gap-4">
@@ -1198,7 +1087,7 @@ const EVParlayCalculator = () => {
                                 </div>
                                 <div className="flex justify-between text-xs">
                                   <span>Pin: {pinnacleOdd > 0 ? '+' : ''}{pinnacleOdd}</span>
-                                  <span>{currentBookConfig?.name}: {boostedOdd > 0 ? '+' : ''}{boostedOdd}</span>
+                                  <span>OnyxOdds: {boostedOdd > 0 ? '+' : ''}{boostedOdd}</span>
                                   <span className={edge > 0 ? 'text-green-600' : 'text-red-600'}>
                                     {edge}%
                                   </span>
@@ -1230,7 +1119,8 @@ const EVParlayCalculator = () => {
               </h2>
               {currentBoost && (
                 <p className="text-sm text-orange-600 mt-1">
-                  ⚠️ {currentBookConfig.name} {sport} requires: {currentBoost.requirement}
+                  ⚠️ OnyxOdds {sport} requires: {currentBoost.requirement}
+                  {currentBoost.minOdds && ` • +${currentBoost.minOdds} odds minimum`}
                 </p>
               )}
             </div>
@@ -1254,7 +1144,7 @@ const EVParlayCalculator = () => {
                 {validateBoostRequirement(legs.filter(leg => leg.pinnacleOdds && leg.boostedOdds), sport, selectedBook) ? (
                   <div className="flex items-center gap-2">
                     <span className="text-green-600">✅</span>
-                    <span className="font-medium">{currentBookConfig.name} boost requirements met!</span>
+                    <span className="font-medium">OnyxOdds boost requirements met!</span>
                     <span className="text-sm">Ready for {currentBoost.percentage}% boost</span>
                   </div>
                 ) : (
@@ -1262,6 +1152,9 @@ const EVParlayCalculator = () => {
                     <span className="text-orange-600">⚠️</span>
                     <span className="font-medium">Boost requirements not met</span>
                     <span className="text-sm">{currentBoost.requirement}</span>
+                    {currentBoost.minOdds && (
+                      <span className="text-sm">• Need +{currentBoost.minOdds} odds</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1306,7 +1199,7 @@ const EVParlayCalculator = () => {
               <div className="col-span-2">
                 <input
                   type="text"
-                  placeholder={currentBookConfig?.name || "Boosted"}
+                  placeholder="OnyxOdds"
                   value={leg.boostedOdds}
                   onChange={(e) => updateLeg(leg.id, 'boostedOdds', e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1334,7 +1227,7 @@ const EVParlayCalculator = () => {
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
           >
             <TrendingUp className="w-5 h-5" />
-            Calculate +EV for {currentBookConfig?.name} {currentBoost?.percentage}% Boost
+            Calculate +EV for OnyxOdds {currentBoost?.percentage}% Boost
           </button>
         </div>
 
@@ -1342,7 +1235,7 @@ const EVParlayCalculator = () => {
         {results && (
           <div className="bg-gray-50 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-4">
-              {currentBookConfig?.name} {sport} Boost Analysis ({results.boostUsed}%)
+              OnyxOdds {sport} Boost Analysis ({results.boostUsed}%)
             </h3>
             
             {results.correlationWarnings && results.correlationWarnings.length > 0 && (
@@ -1394,6 +1287,11 @@ const EVParlayCalculator = () => {
                     {results.isPositiveEV ? '✅ POSITIVE EV' : '❌ NEGATIVE EV'}
                   </div>
                 </div>
+                
+                {/* Calculation verification note */}
+                <div className="mt-3 text-xs text-gray-500 text-center">
+                  Verify: Check that boosted odds match OnyxOdds betslip before betting
+                </div>
               </div>
             </div>
 
@@ -1407,7 +1305,7 @@ const EVParlayCalculator = () => {
                       {leg.selection && <span className="text-gray-600 ml-2">- {leg.selection}</span>}
                     </div>
                     <div className="flex gap-4 text-sm">
-                      <span>{currentBookConfig?.name}: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
+                      <span>OnyxOdds: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
                       <span>Pin: {leg.fairOdds > 0 ? '+' : ''}{leg.fairOdds}</span>
                       <span className={leg.edge > 0 ? 'text-green-600' : 'text-red-600'}>
                         Edge: {leg.edge}%
@@ -1416,6 +1314,28 @@ const EVParlayCalculator = () => {
                   </div>
                 ))}
               </div>
+              
+              {/* Bet Now Button for Manual Calculations */}
+              {results.isPositiveEV && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => openOnyxOdds({
+                      legs: results.legs,
+                      boostUsed: results.boostUsed,
+                      expectedValue: results.expectedValue,
+                      boostedParlay: results.boostedParlay
+                    })}
+                    className="w-full py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg font-bold hover:from-green-700 hover:to-blue-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <span className="text-xl">🎯</span>
+                    <span>BET NOW ON ONYXODDS</span>
+                    <span className="text-xl">💰</span>
+                  </button>
+                  <p className="text-xs text-center text-gray-600 mt-2">
+                    Opens OnyxOdds in new tab with bet details for easy placement
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1423,9 +1343,9 @@ const EVParlayCalculator = () => {
 
       {/* Footer */}
       <div className="mt-6 text-center text-sm text-gray-600">
-        <p>🔴 LIVE odds from {currentBookConfig?.name} vs Pinnacle • Market-based correlation adjustments</p>
-        <p>Manual refresh to preserve API calls • Manual boost updates from sportsbook websites</p>
-        <p>Current {currentBookConfig?.name} {sport} boost: {currentBoost?.percentage}% • Requirements: {currentBoost?.requirement}</p>
+        <p>🔴 LIVE odds from OnyxOdds vs Pinnacle • Market-based correlation adjustments</p>
+        <p>Manual refresh to preserve API calls • Current {sport} boost: {currentBoost?.percentage}%</p>
+        <p>Requirements: {currentBoost?.requirement}{currentBoost?.minOdds ? ` • +${currentBoost.minOdds} odds minimum` : ''}</p>
       </div>
     </div>
   );
