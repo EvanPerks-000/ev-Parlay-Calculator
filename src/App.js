@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, TrendingUp, Plus, Trash2, RefreshCw, Download, Loader, Zap, Target } from 'lucide-react';
+import { Calculator, TrendingUp, Plus, Trash2, RefreshCw, Download, Loader, Zap, Target, Edit3, Save, X, ExternalLink } from 'lucide-react';
 
-// Sportsbook boost configurations
-const SPORTSBOOK_BOOSTS = {
+// Default sportsbook boost configurations
+const DEFAULT_SPORTSBOOK_BOOSTS = {
   onyx: {
     name: 'OnyxOdds',
     oddsProvider: 'draftkings', // DraftKings provides OnyxOdds odds
@@ -10,9 +10,9 @@ const SPORTSBOOK_BOOSTS = {
       MLB: { percentage: 100, requirement: '3+ legs, 2+ from same game', minLegs: 3, sameGame: true },
       Tennis: { percentage: 25, requirement: '3+ legs, mixed games', minLegs: 3, sameGame: false }
     },
-    color: 'purple'
+    color: 'purple',
+    lastUpdated: null
   },
-  // Future sportsbooks can be added here
   draftkings: {
     name: 'DraftKings',
     oddsProvider: 'draftkings',
@@ -20,7 +20,8 @@ const SPORTSBOOK_BOOSTS = {
       MLB: { percentage: 50, requirement: '4+ legs', minLegs: 4, sameGame: false },
       NFL: { percentage: 100, requirement: '3+ legs, same game', minLegs: 3, sameGame: true }
     },
-    color: 'green'
+    color: 'green',
+    lastUpdated: null
   },
   fanduel: {
     name: 'FanDuel', 
@@ -28,7 +29,8 @@ const SPORTSBOOK_BOOSTS = {
     boosts: {
       NBA: { percentage: 30, requirement: '3+ legs', minLegs: 3, sameGame: false }
     },
-    color: 'blue'
+    color: 'blue',
+    lastUpdated: null
   }
 };
 
@@ -56,7 +58,7 @@ const generateRealisticCorrelatedOdds = (baseML, multiplier) => {
   }
 };
 
-const transformOddsApiData = (apiData, sport, selectedBook) => {
+const transformOddsApiData = (apiData, sport, selectedBook, sportsbookBoosts) => {
   const transformedGames = [];
   
   apiData.forEach((game, index) => {
@@ -68,7 +70,7 @@ const transformOddsApiData = (apiData, sport, selectedBook) => {
     );
     
     // Use the specific book that offers the boost
-    const bookConfig = SPORTSBOOK_BOOSTS[selectedBook];
+    const bookConfig = sportsbookBoosts[selectedBook];
     const boostedBookData = game.bookmakers.find(book => 
       book.key === bookConfig.oddsProvider || book.title.toLowerCase().includes(bookConfig.oddsProvider)
     );
@@ -211,8 +213,14 @@ const EVParlayCalculator = () => {
   const [bestParlay, setBestParlay] = useState(null);
   const [autoCalculating, setAutoCalculating] = useState(false);
 
+  // Boost management state
+  const [sportsbookBoosts, setSportsbookBoosts] = useState(DEFAULT_SPORTSBOOK_BOOSTS);
+  const [showBoostEditor, setShowBoostEditor] = useState(false);
+  const [editingBoosts, setEditingBoosts] = useState({});
+  const [selectedBookForEdit, setSelectedBookForEdit] = useState('onyx');
+
   // Get current boost configuration
-  const currentBookConfig = SPORTSBOOK_BOOSTS[selectedBook];
+  const currentBookConfig = sportsbookBoosts[selectedBook];
   const currentBoost = currentBookConfig?.boosts?.[sport];
   const boostPercentage = currentBoost?.percentage || 0;
 
@@ -223,7 +231,7 @@ const EVParlayCalculator = () => {
     try {
       const sportKey = sport === 'MLB' ? 'baseball_mlb' : 'tennis_atp';
       const markets = sport === 'MLB' ? 'h2h,spreads,totals' : 'h2h';
-      const bookConfig = SPORTSBOOK_BOOSTS[selectedBook];
+      const bookConfig = sportsbookBoosts[selectedBook];
       
       console.log(`🔥 Fetching LIVE odds for ${sport} from The Odds API (${bookConfig.name})...`);
       
@@ -254,7 +262,7 @@ const EVParlayCalculator = () => {
       }
       
       // Transform real API data to our format
-      const transformedGames = transformOddsApiData(data, sport, selectedBook);
+      const transformedGames = transformOddsApiData(data, sport, selectedBook, sportsbookBoosts);
       
       if (transformedGames.length === 0) {
         throw new Error(`No games with both Pinnacle and ${bookConfig.name} data found`);
@@ -344,7 +352,7 @@ const EVParlayCalculator = () => {
   };
 
   const validateBoostRequirement = (legs, sport, selectedBook) => {
-    const bookConfig = SPORTSBOOK_BOOSTS[selectedBook];
+    const bookConfig = sportsbookBoosts[selectedBook];
     const boostConfig = bookConfig?.boosts?.[sport];
     
     if (!boostConfig) return true; // No specific requirements
@@ -616,6 +624,46 @@ const EVParlayCalculator = () => {
     ));
   };
 
+  // Boost management functions
+  const updateBoosts = (bookKey, newBoosts) => {
+    const updated = {
+      ...sportsbookBoosts,
+      [bookKey]: {
+        ...sportsbookBoosts[bookKey],
+        boosts: newBoosts,
+        lastUpdated: new Date().toISOString()
+      }
+    };
+    setSportsbookBoosts(updated);
+  };
+
+  const openBoostEditor = (bookKey) => {
+    setSelectedBookForEdit(bookKey);
+    setEditingBoosts({ ...sportsbookBoosts[bookKey].boosts });
+    setShowBoostEditor(true);
+  };
+
+  const saveBoostEdits = () => {
+    updateBoosts(selectedBookForEdit, editingBoosts);
+    setShowBoostEditor(false);
+    setEditingBoosts({});
+  };
+
+  const addNewSport = () => {
+    const sport = prompt('Enter sport name (e.g., NFL, NBA, NHL):');
+    if (sport && sport.trim()) {
+      setEditingBoosts({
+        ...editingBoosts,
+        [sport.trim()]: {
+          percentage: 0,
+          requirement: '3+ legs',
+          minLegs: 3,
+          sameGame: false
+        }
+      });
+    }
+  };
+
   // Auto-generate when games load (but NO auto-refresh)
   useEffect(() => {
     if (liveGames.length > 0 && !autoCalculating && !bestParlay) {
@@ -635,8 +683,13 @@ const EVParlayCalculator = () => {
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <Calculator className="w-8 h-8 text-blue-600" />
-            <h1 className="text-3xl font-bold text-gray-900">+EV Parlay Finder</h1>
-            <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">LIVE ODDS</span>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">+EV Parlay Finder</h1>
+              <div className="flex gap-2 mt-1">
+                <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">LIVE ODDS</span>
+                <span className="text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded">MANUAL BOOST UPDATES</span>
+              </div>
+            </div>
           </div>
           
           <div className="flex gap-3">
@@ -692,26 +745,206 @@ const EVParlayCalculator = () => {
 
         {/* Sportsbook Selection */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Sportsbook & Boost</label>
-          <div className="flex gap-4 mb-4">
-            {Object.entries(SPORTSBOOK_BOOSTS).map(([key, config]) => (
-              <button
-                key={key}
-                onClick={() => setSelectedBook(key)}
-                className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                  selectedBook === key 
-                    ? `bg-${config.color}-600 text-white` 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <div className="text-lg">{config.name}</div>
-                <div className="text-xs opacity-75">
-                  {Object.keys(config.boosts).join(', ')} boosts
-                </div>
-              </button>
-            ))}
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-sm font-medium text-gray-700">Sportsbook & Boost</label>
+            <button
+              onClick={() => setShowBoostEditor(true)}
+              className="flex items-center gap-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+            >
+              <Edit3 className="w-4 h-4" />
+              Update Boosts
+            </button>
           </div>
+          <div className="flex gap-4 mb-4">
+            {Object.entries(sportsbookBoosts).map(([key, config]) => {
+              const boostCount = Object.keys(config.boosts).length;
+              const lastUpdated = config.lastUpdated ? new Date(config.lastUpdated).toLocaleDateString() : 'Never';
+              
+              return (
+                <div key={key} className="relative">
+                  <button
+                    onClick={() => setSelectedBook(key)}
+                    className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                      selectedBook === key 
+                        ? `bg-${config.color}-600 text-white` 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <div className="text-lg">{config.name}</div>
+                    <div className="text-xs opacity-75">
+                      {boostCount} sport{boostCount !== 1 ? 's' : ''}
+                    </div>
+                    <div className="text-xs opacity-60">
+                      Updated: {lastUpdated}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => openBoostEditor(key)}
+                    className="absolute -top-1 -right-1 w-6 h-6 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-colors flex items-center justify-center"
+                    title="Edit boosts"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Quick OnyxOdds Link */}
+          {selectedBook === 'onyx' && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-800">Check Current OnyxOdds Boosts</p>
+                  <p className="text-xs text-purple-600">Copy boost info from their website and update here</p>
+                </div>
+                <a
+                  href="https://onyxodds.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Visit OnyxOdds
+                </a>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Boost Editor Modal */}
+        {showBoostEditor && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold">
+                  Update {sportsbookBoosts[selectedBookForEdit]?.name} Boosts
+                </h3>
+                <button
+                  onClick={() => setShowBoostEditor(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-800 mb-2">📋 How to Update Boosts</h4>
+                <div className="text-sm text-blue-700 space-y-1">
+                  <p>1. Visit the sportsbook website</p>
+                  <p>2. Look for boost banners (usually at the top)</p>
+                  <p>3. Copy the boost percentage and requirements</p>
+                  <p>4. Update the information below</p>
+                  <p>5. Save to apply the new boosts</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                {Object.entries(editingBoosts).map(([sport, boost]) => (
+                  <div key={sport} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-medium text-lg">{sport}</h4>
+                      <button
+                        onClick={() => {
+                          const newBoosts = { ...editingBoosts };
+                          delete newBoosts[sport];
+                          setEditingBoosts(newBoosts);
+                        }}
+                        className="p-1 text-red-600 hover:bg-red-100 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Boost Percentage</label>
+                        <input
+                          type="number"
+                          value={boost.percentage}
+                          onChange={(e) => setEditingBoosts({
+                            ...editingBoosts,
+                            [sport]: { ...boost, percentage: parseInt(e.target.value) || 0 }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          placeholder="100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Minimum Legs</label>
+                        <input
+                          type="number"
+                          value={boost.minLegs}
+                          onChange={(e) => setEditingBoosts({
+                            ...editingBoosts,
+                            [sport]: { ...boost, minLegs: parseInt(e.target.value) || 3 }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          placeholder="3"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium mb-1">Requirements</label>
+                      <input
+                        type="text"
+                        value={boost.requirement}
+                        onChange={(e) => setEditingBoosts({
+                          ...editingBoosts,
+                          [sport]: { ...boost, requirement: e.target.value }
+                        })}
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                        placeholder="3+ legs, 2+ from same game"
+                      />
+                    </div>
+                    
+                    <div className="mt-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={boost.sameGame}
+                          onChange={(e) => setEditingBoosts({
+                            ...editingBoosts,
+                            [sport]: { ...boost, sameGame: e.target.checked }
+                          })}
+                          className="rounded"
+                        />
+                        <span className="text-sm">Requires same-game legs</span>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 justify-between">
+                <button
+                  onClick={addNewSport}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Sport
+                </button>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowBoostEditor(false)}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveBoostEdits}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Boosts
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Sport Selection */}
         <div className="mb-6">
@@ -1115,8 +1348,8 @@ const EVParlayCalculator = () => {
       {/* Footer */}
       <div className="mt-6 text-center text-sm text-gray-600">
         <p>🔴 LIVE odds from {currentBookConfig?.name} vs Pinnacle • Market-based correlation adjustments</p>
-        <p>Manual refresh only to preserve API calls • {currentBookConfig?.name} {sport} boost: {currentBoost?.percentage}%</p>
-        <p>Requirements: {currentBoost?.requirement}</p>
+        <p>Manual refresh to preserve API calls • Manual boost updates from sportsbook websites</p>
+        <p>Current {currentBookConfig?.name} {sport} boost: {currentBoost?.percentage}% • Requirements: {currentBoost?.requirement}</p>
       </div>
     </div>
   );
