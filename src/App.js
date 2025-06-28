@@ -224,16 +224,46 @@ const EVParlayCalculator = () => {
   const currentBoost = currentBookConfig?.boosts?.[sport];
   const boostPercentage = currentBoost?.percentage || 0;
 
+  // Get available tennis tournaments
+  const getTennisOptions = async () => {
+    try {
+      const sportsResponse = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${apiKey}`);
+      if (sportsResponse.ok) {
+        const sportsData = await sportsResponse.json();
+        const tennisSports = sportsData.filter(sport => 
+          sport.group === 'Tennis' && sport.active
+        );
+        return tennisSports.length > 0 ? tennisSports[0].key : null;
+      }
+    } catch (error) {
+      console.log('Could not fetch tennis options:', error);
+    }
+    return null;
+  };
+
   // LIVE ODDS FUNCTION - NO AUTO REFRESH to save API calls
   const fetchLiveOdds = async () => {
     setLoading(true);
     
     try {
-      const sportKey = sport === 'MLB' ? 'baseball_mlb' : 'tennis_atp';
+      let sportKey;
+      
+      if (sport === 'MLB') {
+        sportKey = 'baseball_mlb';
+      } else if (sport === 'Tennis') {
+        // First try to get current tennis tournaments
+        sportKey = await getTennisOptions();
+        if (!sportKey) {
+          throw new Error('No active tennis tournaments found. Tennis is tournament-specific and may be out of season.');
+        }
+      } else {
+        throw new Error(`Sport ${sport} not configured for live odds yet.`);
+      }
+      
       const markets = sport === 'MLB' ? 'h2h,spreads,totals' : 'h2h';
       const bookConfig = sportsbookBoosts[selectedBook];
       
-      console.log(`🔥 Fetching LIVE odds for ${sport} from The Odds API (${bookConfig.name})...`);
+      console.log(`🔥 Fetching LIVE odds for ${sport} (${sportKey}) from The Odds API (${bookConfig.name})...`);
       
       const apiUrl = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/` +
                      `?apiKey=${apiKey}` +
@@ -258,7 +288,7 @@ const EVParlayCalculator = () => {
       console.log(`📊 API Usage - Remaining: ${remainingRequests}`);
       
       if (data.length === 0) {
-        throw new Error(`No live games found for ${sport}. Check if it's the season.`);
+        throw new Error(`No live games found for ${sport}. Check if it's the season or if tournaments are active.`);
       }
       
       // Transform real API data to our format
@@ -279,7 +309,13 @@ const EVParlayCalculator = () => {
       
     } catch (error) {
       console.error('❌ Error fetching live odds:', error);
-      alert(`Live Odds Error: ${error.message}\n\nUsing demo data as fallback.`);
+      
+      let errorMessage = error.message;
+      if (sport === 'Tennis') {
+        errorMessage += '\n\n🎾 Tennis Note: The Odds API uses tournament-specific keys (e.g., tennis_wta_australian_open). Tennis may not be available year-round or between tournaments.';
+      }
+      
+      alert(`Live Odds Error: ${errorMessage}\n\nUsing demo data as fallback.`);
       setLiveGames(simulateOddsData());
       
       // Still try to auto-generate with demo data
@@ -293,20 +329,54 @@ const EVParlayCalculator = () => {
 
   // Simulated data (fallback only)
   const simulateOddsData = () => {
-    const mlbGames = [
-      {
-        id: 'demo_mlb_1',
-        homeTeam: 'Yankees',
-        awayTeam: 'Red Sox',
-        startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        markets: {
-          moneyline: { pinnacle: { home: -120, away: +110 }, boosted: { home: -115, away: +105 } },
-          runline: { pinnacle: { home: +145, away: -165 }, boosted: { home: +150, away: -160 } },
-          total: { pinnacle: { over: -110, under: -110 }, boosted: { over: -105, under: -115 } }
+    if (sport === 'MLB') {
+      return [
+        {
+          id: 'demo_mlb_1',
+          homeTeam: 'Yankees',
+          awayTeam: 'Red Sox',
+          startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: -120, away: +110 }, boosted: { home: -115, away: +105 } },
+            runline: { pinnacle: { home: +145, away: -165 }, boosted: { home: +150, away: -160 } },
+            total: { pinnacle: { over: -110, under: -110 }, boosted: { over: -105, under: -115 } }
+          }
+        },
+        {
+          id: 'demo_mlb_2',
+          homeTeam: 'Dodgers',
+          awayTeam: 'Giants',
+          startTime: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: -140, away: +125 }, boosted: { home: -135, away: +120 } },
+            runline: { pinnacle: { home: +155, away: -175 }, boosted: { home: +160, away: -170 } },
+            total: { pinnacle: { over: -108, under: -112 }, boosted: { over: -105, under: -115 } }
+          }
         }
-      }
-    ];
-    return sport === 'MLB' ? mlbGames : [];
+      ];
+    } else if (sport === 'Tennis') {
+      return [
+        {
+          id: 'demo_tennis_1',
+          homeTeam: 'Novak Djokovic',
+          awayTeam: 'Carlos Alcaraz',
+          startTime: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: +120, away: -140 }, boosted: { home: +125, away: -135 } }
+          }
+        },
+        {
+          id: 'demo_tennis_2',
+          homeTeam: 'Iga Swiatek',
+          awayTeam: 'Aryna Sabalenka',
+          startTime: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
+          markets: {
+            moneyline: { pinnacle: { home: -110, away: -110 }, boosted: { home: -105, away: -105 } }
+          }
+        }
+      ];
+    }
+    return [];
   };
 
   const getAllAvailableBets = () => {
@@ -985,6 +1055,12 @@ const EVParlayCalculator = () => {
             <p className="text-xs text-gray-600 mt-1">
               Odds Provider: {currentBookConfig.oddsProvider} • Comparing vs Pinnacle sharp odds
             </p>
+            {sport === 'Tennis' && (
+              <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">
+                🎾 <strong>Tennis Note:</strong> Tennis odds are tournament-specific and may not be available year-round. 
+                The API automatically finds active tennis tournaments, but availability depends on the current tennis season.
+              </div>
+            )}
           </div>
         )}
 
