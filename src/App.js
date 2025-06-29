@@ -11,7 +11,7 @@ const ONYXODDS_BOOSTS = {
     },
     color: 'purple'
   }
-};
+}; 
  
 const EVParlayCalculator = () => {
   const [sport, setSport] = useState('Tennis');
