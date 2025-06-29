@@ -1132,3 +1132,4 @@ const EVParlayCalculator = () => {
 };
 
 export default EVParlayCalculator;
+
