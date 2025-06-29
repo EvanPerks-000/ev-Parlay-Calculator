@@ -548,26 +548,21 @@ const EVParlayCalculator = () => {
     // Convert parlay decimal to American odds
     const originalParlayAmerican = decimalToAmerican(parlayDecimal);
     
-    // Apply OnyxOdds boost method: add percentage directly to American odds
-    let boostedParlayAmerican;
-    if (originalParlayAmerican > 0) {
-      // For positive odds: add the percentage directly
-      boostedParlayAmerican = Math.round(originalParlayAmerican + (originalParlayAmerican * boostPercentage / 100));
-    } else {
-      // For negative odds: reduce the magnitude
-      const boostedDecimal = parlayDecimal * (1 + boostPercentage / 100);
-      boostedParlayAmerican = decimalToAmerican(boostedDecimal);
-    }
-    
-    // Calculate EV using the boosted American odds
-    const boostedDecimal = americanToDecimal(boostedParlayAmerican);
-    const ev = ((boostedDecimal / fairParlayDecimal - 1) * 100);
-    
-    console.log(`🔢 Parlay Calculation Debug:
-    Base Parlay: ${originalParlayAmerican}
-    Boost: ${boostPercentage}%
-    Boosted: ${boostedParlayAmerican}
-    Expected Boosted: ${originalParlayAmerican > 0 ? originalParlayAmerican + Math.round(originalParlayAmerican * boostPercentage / 100) : 'N/A'}`);
+  // FIXED: Apply boost consistently using decimal multiplication method
+const boostedDecimal = parlayDecimal * (1 + boostPercentage / 100);
+const boostedParlayAmerican = decimalToAmerican(boostedDecimal);
+
+// Calculate EV using the boosted decimal odds
+const ev = ((boostedDecimal / fairParlayDecimal - 1) * 100);
+
+console.log(`🔢 Parlay Calculation Debug:
+Original Parlay Decimal: ${parlayDecimal.toFixed(4)}
+Fair Parlay Decimal: ${fairParlayDecimal.toFixed(4)}
+Boost: ${boostPercentage}%
+Boosted Decimal: ${boostedDecimal.toFixed(4)}
+Original American: ${originalParlayAmerican}
+Boosted American: ${boostedParlayAmerican}
+Expected Value: ${ev.toFixed(2)}%`);
     
     return {
       originalParlay: originalParlayAmerican,
