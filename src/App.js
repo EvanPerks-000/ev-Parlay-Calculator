@@ -11,8 +11,8 @@ const ONYXODDS_BOOSTS = {
     },
     color: 'purple'
   }
-};  
- 
+};
+
 const EVParlayCalculator = () => {
   const [sport, setSport] = useState('Tennis');
   const [selectedBook, setSelectedBook] = useState('onyx');
@@ -137,100 +137,110 @@ const EVParlayCalculator = () => {
   const fairValueCache = new Map();
   
   const calculateFairValueViaCrazyNinja = async (oddsArray) => {
-    // Create cache key from sorted odds to handle same combinations in different orders
-    const cacheKey = oddsArray.slice().sort((a, b) => a - b).join(',');
+    // Fix: Create cache key from the formatted odds string, not the objects
+    const legOddsString = oddsArray.map(oddsData => {
+      if (typeof oddsData === 'object' && oddsData.marketSides) {
+        // Format as favorite/underdog for CrazyNinja
+        const homeOdds = oddsData.marketSides.home.pinnacle;
+        const awayOdds = oddsData.marketSides.away.pinnacle;
+        
+        // Determine favorite/underdog (lower absolute value = favorite)
+        if (Math.abs(homeOdds) < Math.abs(awayOdds)) {
+          return `${homeOdds}/${awayOdds}`; // home favorite
+        } else {
+          return `${awayOdds}/${homeOdds}`; // away favorite
+        }
+      } else {
+        // Fallback for single odds
+        const oddsValue = typeof oddsData === 'string' ? parseInt(oddsData) : oddsData;
+        return oddsValue.toString();
+      }
+    }).join(',');
+  
+    // Create cache key from the formatted string, not the original objects
+    const cacheKey = legOddsString;
     
     // Check cache first
     if (fairValueCache.has(cacheKey)) {
       console.log(`📋 Using cached fair value for: ${cacheKey}`);
       return fairValueCache.get(cacheKey);
     }
-
+  
     try {
-      const legOddsString = oddsArray.map(odds => {
-        const oddsValue = typeof odds === 'string' ? parseInt(odds) : odds;
-        return oddsValue.toString();
-      }).join(',');
-
-      // Using a CORS proxy to handle the API call
-      const proxyUrl = 'https://api.allorigins.win/get?url=';
-      const targetUrl = `http://crazyninjamike.com/public/sportsbooks/sportsbook_devigger.aspx?LegOdds=${encodeURIComponent(legOddsString)}&DevigMethod=2&Args=fo_o`;
-      const apiUrl = proxyUrl + encodeURIComponent(targetUrl);
-
-      console.log(`🔍 Calling CrazyNinja API (NEW): ${legOddsString}`);
-
-      const response = await fetch(apiUrl);
-      
-      if (!response.ok) {
-        throw new Error(`API responded with status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const responseText = data.contents;
-      
-      console.log('🔍 CrazyNinja Response:', responseText);
-
-      // Try to extract fair odds from the response
-      const match = responseText.match(/([+-]?\d+)/);
-      if (match) {
-        let fairOdds = parseInt(match[1]);
-        
-        // Validate American odds format
-        if (fairOdds > 0 && fairOdds < 100) {
-          fairOdds = 100; // Minimum positive odds
-        } else if (fairOdds < 0 && fairOdds > -100) {
-          fairOdds = -100; // Minimum negative odds
+      // ... rest of the function stays the same
+      const legOddsString = oddsArray.map(oddsData => {
+        if (typeof oddsData === 'object' && oddsData.marketSides) {
+          // Format as favorite/underdog for CrazyNinja
+          const homeOdds = oddsData.marketSides.home.pinnacle;
+          const awayOdds = oddsData.marketSides.away.pinnacle;
+          
+          // Determine favorite/underdog (lower absolute value = favorite)
+          if (Math.abs(homeOdds) < Math.abs(awayOdds)) {
+            return `${homeOdds}/${awayOdds}`; // home favorite
+          } else {
+            return `${awayOdds}/${homeOdds}`; // away favorite
+          }
+        } else {
+          // Fallback for single odds
+          const oddsValue = typeof oddsData === 'string' ? parseInt(oddsData) : oddsData;
+          return oddsValue.toString();
         }
-        
-        console.log(`✅ Fair value from CrazyNinja: ${fairOdds}`);
-        
-        // Cache the result
-        fairValueCache.set(cacheKey, fairOdds);
-        return fairOdds;
-      } else {
-        throw new Error('Could not parse fair odds from response');
-      }
-
-    } catch (error) {
-      console.error('❌ CrazyNinja API error:', error);
-      console.log('📝 Falling back to manual calculation');
-      const fallbackResult = calculateManualFairOdds(oddsArray);
-      fairValueCache.set(cacheKey, fallbackResult);
-      return fallbackResult;
+      }).join(',');
+  
+     const calculateFairValueViaCrazyNinja = async (oddsArray) => {
+  const legOddsString = oddsArray.map(oddsData => {
+    if (typeof oddsData === 'object' && oddsData.marketSides) {
+      const homeOdds = oddsData.marketSides.home.pinnacle;
+      const awayOdds = oddsData.marketSides.away.pinnacle;
+      return Math.abs(homeOdds) < Math.abs(awayOdds)
+        ? `${homeOdds}/${awayOdds}`
+        : `${awayOdds}/${homeOdds}`;
+    } else {
+      const oddsValue = typeof oddsData === 'string' ? parseInt(oddsData) : oddsData;
+      return oddsValue.toString();
     }
-  };
+  }).join(',');
 
-  // Manual fair odds calculation as fallback
-  const calculateManualFairOdds = (oddsArray) => {
-    try {
-      let parlayDecimal = 1;
-      
-      // Calculate parlay decimal odds from individual legs
-      oddsArray.forEach(odds => {
-        const oddsValue = typeof odds === 'string' ? parseInt(odds) : odds;
-        const decimal = americanToDecimal(oddsValue);
-        const impliedProb = 1 / decimal;
-        // Remove vig from each leg (assuming 2.5% vig)
-        const fairProb = impliedProb / 1.025;
-        const fairDecimal = 1 / fairProb;
-        parlayDecimal *= fairDecimal;
-      });
-      
-      const fairOdds = decimalToAmerican(parlayDecimal);
-      console.log(`📊 Manual calculation: decimal ${parlayDecimal.toFixed(4)} -> American ${fairOdds}`);
+  const cacheKey = legOddsString;
+  if (fairValueCache.has(cacheKey)) {
+    console.log(`📋 Using cached fair value for: ${cacheKey}`);
+    return fairValueCache.get(cacheKey);
+  }
+
+  try {
+    const proxyUrl = 'https://api.allorigins.win/get?url=';
+    const targetUrl = `http://crazyninjamike.com/public/sportsbooks/sportsbook_devigger.aspx?LegOdds=${encodeURIComponent(legOddsString)}&DevigMethod=2&Args=fo_o`;
+    const apiUrl = proxyUrl + encodeURIComponent(targetUrl);
+
+    console.log(`🔍 Calling CrazyNinja API (NEW): ${legOddsString}`);
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`API responded with status: ${response.status}`);
+
+    const data = await response.json();
+    const responseText = data.contents;
+
+    console.log('🔍 CrazyNinja API called with odds:', oddsArray);
+
+    const match = responseText.match(/([+-]?\d+)/);
+    if (match) {
+      let fairOdds = parseInt(match[1]);
+      if (fairOdds > 0 && fairOdds < 100) fairOdds = 100;
+      else if (fairOdds < 0 && fairOdds > -100) fairOdds = -100;
+
+      console.log(`✅ Fair value from CrazyNinja: ${fairOdds}`);
+      fairValueCache.set(cacheKey, fairOdds);
       return fairOdds;
-    } catch (error) {
-      console.error('Manual calculation error:', error);
-      // Very basic fallback
-      const totalDecimal = oddsArray.reduce((acc, odds) => {
-        const oddsValue = typeof odds === 'string' ? parseInt(odds) : odds;
-        return acc * americanToDecimal(oddsValue);
-      }, 1);
-      const fallbackOdds = decimalToAmerican(totalDecimal * 0.95);
-      console.log(`📊 Fallback calculation: ${fallbackOdds}`);
-      return fallbackOdds;
+    } else {
+      throw new Error('Could not parse fair odds from response');
     }
-  };
+  } catch (error) {
+    console.error('❌ CrazyNinja API error:', error);
+    throw new Error(`CrazyNinja API failed: ${error.message}`);
+  }
+};
+
+
 
   // Correlation detection and adjustment (minimal for tennis)
   const detectCorrelation = (bets) => {
@@ -271,19 +281,19 @@ const EVParlayCalculator = () => {
       parlayDecimal *= bookDecimal;
     });
 
-    // Get fair value - use cache or manual calculation for batch processing
-    const pinnacleOddsArray = bets.map(bet => bet.pinnacleOdds);
+    const pinnacleOddsArray = bets.map(bet => ({
+      pinnacleOdds: bet.pinnacleOdds,
+      marketSides: bet.marketSides
+    }));
     
     let fairParlayOdds;
-    if (skipApiCall) {
-      // Use manual calculation for batch processing to avoid API spam
-      fairParlayOdds = calculateManualFairOdds(pinnacleOddsArray);
-      console.log(`📊 Manual fair calculation: ${fairParlayOdds}`);
-    } else {
-      // Use API for single calculations
-      fairParlayOdds = await calculateFairValueViaCrazyNinja(pinnacleOddsArray);
-      console.log(`📊 API fair calculation: ${fairParlayOdds}`);
-    }
+try {
+  fairParlayOdds = await calculateFairValueViaCrazyNinja(pinnacleOddsArray);
+  console.log(`📊 API fair calculation: ${fairParlayOdds}`);
+} catch (error) {
+  console.error('❌ CrazyNinja API failed:', error);
+  throw new Error(`CrazyNinja API required but failed: ${error.message}`);
+}
     
     const fairParlayDecimal = americanToDecimal(fairParlayOdds);
 
@@ -330,9 +340,10 @@ const EVParlayCalculator = () => {
         market: bet.market || 'Moneyline',
         selection: bet.selection || 'Unknown',
         boostedOdds: bet.boostedOdds,
-        fairOdds: bet.pinnacleOdds,
-        calculatedFairOdds: fairParlayOdds,
-        edge: ((americanToDecimal(bet.boostedOdds) / americanToDecimal(bet.pinnacleOdds) - 1) * 100).toFixed(2)
+        pinnacleOdds: bet.pinnacleOdds,  // Fix: Add pinnacleOdds field
+        fairOdds: bet.pinnacleOdds,      // Individual fair odds (using Pinnacle)
+        calculatedFairOdds: fairParlayOdds, // Keep parlay fair odds for reference
+        individualEdge: ((americanToDecimal(bet.boostedOdds) / americanToDecimal(bet.pinnacleOdds) - 1) * 100).toFixed(2)  // Fix: Use individualEdge
       }))
     };
   };
@@ -403,12 +414,23 @@ const EVParlayCalculator = () => {
     
     setLoading(false);
   };
-
   const getAllAvailableBets = () => {
     const allBets = [];
     
     liveGames.forEach(game => {
       Object.entries(game.markets).forEach(([market, odds]) => {
+        // Include both sides of the market for CrazyNinja
+        const marketSides = {
+          home: {
+            pinnacle: odds.pinnacle.home,
+            boosted: odds.boosted.home
+          },
+          away: {
+            pinnacle: odds.pinnacle.away,
+            boosted: odds.boosted.away
+          }
+        };
+        
         Object.entries(odds.pinnacle).forEach(([side, pinnacleOdd]) => {
           const boostedOdd = odds.boosted[side];
           if (pinnacleOdd && boostedOdd) {
@@ -424,7 +446,8 @@ const EVParlayCalculator = () => {
               pinnacleOdds: pinnacleOdd,
               boostedOdds: boostedOdd,
               side,
-              marketType: market
+              marketType: market,
+              marketSides // Add this line - this was missing!
             });
           }
         });
@@ -456,6 +479,7 @@ const EVParlayCalculator = () => {
   };
 
   // Optimized best parlay finder with reduced API calls
+
   const findBestParlay = async () => {
     setAutoCalculating(true);
     
@@ -467,30 +491,51 @@ const EVParlayCalculator = () => {
       setAutoCalculating(false);
       return;
     }
+  // Pre-filter to only profitable-looking bets (0% edge or better)
+  const goodBets = allBets.filter(bet => {
+    const edge = ((americanToDecimal(bet.boostedOdds) / americanToDecimal(bet.pinnacleOdds) - 1) * 100);
+    return edge >= -10; // Very loose filter, just to eliminate obviously bad bets
+  });
 
-    let bestEV = -Infinity;
-    let bestCombination = null;
-    let combinationsChecked = 0;
-    
-    console.log(`🚀 Analyzing ${allBets.length} bets - using manual calculation for speed`);
+  console.log(`🎯 Filtered from ${allBets.length} to ${goodBets.length} promising bets (-2%+ edge)`);
 
-    // Use manual calculation for batch processing to avoid API rate limits
-    for (let i = 0; i < allBets.length - 2; i++) {
-      for (let j = i + 1; j < allBets.length - 1; j++) {
-        for (let k = j + 1; k < allBets.length; k++) {
-          const combination = [allBets[i], allBets[j], allBets[k]];
-          
-          // Check boost requirements
-          if (!validateBoostRequirement(combination.map(bet => ({
-            pinnacleOdds: bet.pinnacleOdds.toString(),
-            boostedOdds: bet.boostedOdds.toString(),
-            gameId: bet.gameId
-          })), sport, selectedBook)) {
-            continue;
-          }
-          
-          // Use manual calculation for batch processing (much faster)
-          const parlayResult = await calculateParlayEV(combination, true); // skipApiCall = true
+  if (goodBets.length < 3) {
+    alert('Not enough profitable tennis bets available (need 3+ with -2% edge or better).');
+    setAutoCalculating(false);
+    return;
+  }
+  let bestEV = -Infinity;
+  let bestCombination = null;
+  let combinationsChecked = 0;
+  
+  console.log(`🚀 Analyzing ${goodBets.length} promising bets using CrazyNinja API`);
+
+  // Use the filtered good bets for combinations
+  for (let i = 0; i < Math.min(goodBets.length - 2, 5); i++) {
+    for (let j = i + 1; j < Math.min(goodBets.length - 1, 8); j++) {
+      for (let k = j + 1; k < Math.min(goodBets.length, 10); k++) {
+        const combination = [goodBets[i], goodBets[j], goodBets[k]];
+        
+        // Add this check to ensure no duplicate games
+        const gameIds = combination.map(bet => bet.gameId);
+        const uniqueGameIds = [...new Set(gameIds)];
+        if (uniqueGameIds.length !== combination.length) {
+          console.log('⏭️ Skipping combination with duplicate games');
+          continue;
+        }
+        
+        // Check boost requirements
+        if (!validateBoostRequirement(combination.map(bet => ({
+          pinnacleOdds: bet.pinnacleOdds.toString(),
+          boostedOdds: bet.boostedOdds.toString(),
+          gameId: bet.gameId
+        })), sport, selectedBook)) {
+          continue;
+        }
+        
+        try {
+          // Always use API
+          const parlayResult = await calculateParlayEV(combination, false);
           combinationsChecked++;
           
           if (parlayResult.expectedValue > bestEV) {
@@ -501,48 +546,48 @@ const EVParlayCalculator = () => {
             };
           }
           
-          // Limit combinations to prevent freezing
-          if (combinationsChecked >= 100) break;
+          // Limit combinations to prevent too many API calls
+          if (combinationsChecked >= 10) break;
+        } catch (error) {
+          console.error('❌ API error for combination:', error);
         }
-        if (combinationsChecked >= 100) break;
       }
-      if (combinationsChecked >= 100) break;
+      if (combinationsChecked >= 10) break;
     }
+    if (combinationsChecked >= 10) break;
+  }
 
-    // Now get accurate fair value for the best combination using API
-    if (bestCombination) {
-      console.log(`🎯 Refining best bet with CrazyNinja API...`);
-      const refinedResult = await calculateParlayEV(bestCombination.bets, false); // Use API for final calculation
-      bestCombination.result = refinedResult;
-    }
+  setBestParlay({
+    ...bestCombination,
+    combinationsChecked,
+    totalPossible: Math.min(10, goodBets.length >= 3 ? (goodBets.length * (goodBets.length - 1) * (goodBets.length - 2)) / 6 : 0)
+  });
 
-    setBestParlay({
-      ...bestCombination,
-      combinationsChecked,
-      totalPossible: Math.min(100, allBets.length >= 3 ? (allBets.length * (allBets.length - 1) * (allBets.length - 2)) / 6 : 0)
+  if (bestCombination) {
+    const newLegs = bestCombination.bets.map((bet, index) => ({
+      id: Date.now() + index,
+      market: bet.market,
+      selection: bet.selection,
+      pinnacleOdds: bet.pinnacleOdds.toString(),
+      boostedOdds: bet.boostedOdds.toString(),
+      gameId: bet.gameId,
+      fairOdds: bestCombination.result.fairParlay.toString()
+    }));
+    
+    setLegs(newLegs);
+    setResults({
+      ...bestCombination.result,
+      boostUsed: boostPercentage,
+      legCount: 3
     });
+  } else {
+    alert('No profitable tennis parlays found with current odds.');
+  }
 
-    if (bestCombination) {
-      const newLegs = bestCombination.bets.map((bet, index) => ({
-        id: Date.now() + index,
-        market: bet.market,
-        selection: bet.selection,
-        pinnacleOdds: bet.pinnacleOdds.toString(),
-        boostedOdds: bet.boostedOdds.toString(),
-        gameId: bet.gameId,
-        fairOdds: bestCombination.result.fairParlay.toString()
-      }));
-      
-      setLegs(newLegs);
-      setResults({
-        ...bestCombination.result,
-        boostUsed: boostPercentage,
-        legCount: 3
-      });
-    }
+  setAutoCalculating(false);
+};
 
-    setAutoCalculating(false);
-  };
+
 
   const addGameToParlay = (game, market, side) => {
     const pinnacleOdds = game.markets[market]?.pinnacle?.[side];
@@ -753,41 +798,41 @@ const EVParlayCalculator = () => {
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">Expected Value</div>
                 <div className={`text-3xl font-bold ${bestParlay?.result?.isPositiveEV ? 'text-green-600' : 'text-red-600'}`}>
-                  {bestParlay.result.expectedValue > 0 ? '+' : ''}{bestParlay.result.expectedValue.toFixed(2)}%
+                {bestParlay?.result?.expectedValue > 0 ? '+' : ''}{bestParlay?.result?.expectedValue?.toFixed(2) || '0.00'}%
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">Boosted Odds</div>
                 <div className="text-3xl font-bold text-purple-600">
-                  {bestParlay.result.boostedParlay > 0 ? '+' : ''}{bestParlay.result.boostedParlay}
-                </div>
+  {bestParlay?.result?.boostedParlay > 0 ? '+' : ''}{bestParlay?.result?.boostedParlay || 'N/A'}
+</div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">Fair Value</div>
                 <div className="text-3xl font-bold text-blue-600">
-                  {bestParlay.result.fairParlay > 0 ? '+' : ''}{bestParlay.result.fairParlay}
-                </div>
+                {bestParlay?.result?.fairParlay > 0 ? '+' : ''}{bestParlay?.result?.fairParlay || 'N/A'}
+</div>
               </div>
             </div>
             
             <div className="bg-white rounded-lg p-4 mb-4">
               <h4 className="font-semibold mb-3 text-gray-800">Recommended Tennis Bets:</h4>
               <div className="space-y-3">
-                {bestParlay.result.legs.map((leg, index) => (
-                  <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <span className="font-medium text-lg">{leg.market}</span>
-                      <span className="text-gray-600 ml-2">- {leg.selection}</span>
-                    </div>
-                    <div className="flex gap-4 text-sm">
-                      <span className="font-medium">OnyxOdds: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
-                      <span>Pinnacle: {leg.pinnacleOdds > 0 ? '+' : ''}{leg.pinnacleOdds}</span>
-                      <span className={leg.individualEdge > 0 ? 'text-green-600' : 'text-red-600'}>
-                        Edge: {leg.individualEdge}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              {bestParlay?.result?.legs?.map((leg, index) => (
+  <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+    <div className="flex-1">
+      <span className="font-medium text-lg">{leg.market}</span>
+      <span className="text-gray-600 ml-2">- {leg.selection}</span>
+    </div>
+    <div className="flex gap-4 text-sm">
+      <span className="font-medium">DraftKings: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
+      <span>Pinnacle: {leg.pinnacleOdds > 0 ? '+' : ''}{leg.pinnacleOdds}</span>
+      <span className={leg.individualEdge > 0 ? 'text-green-600' : 'text-red-600'}>
+        Edge: {leg.individualEdge}%
+      </span>
+    </div>
+  </div>
+))}
               </div>
               
               {/* Show parlay-level fair value */}
@@ -795,7 +840,7 @@ const EVParlayCalculator = () => {
                 <div className="text-center">
                   <div className="text-sm text-gray-600">Complete Parlay Fair Value</div>
                   <div className="text-xl font-bold text-blue-600">
-                    {bestParlay.result.parlayFairValue > 0 ? '+' : ''}{bestParlay.result.parlayFairValue}
+                  {bestParlay?.result?.parlayFairValue > 0 ? '+' : ''}{bestParlay?.result?.parlayFairValue || 'N/A'}
                   </div>
                 </div>
               </div>
@@ -1070,21 +1115,21 @@ const EVParlayCalculator = () => {
               <h4 className="font-semibold mb-3">Tennis Leg Breakdown</h4>
               <div className="space-y-2">
                 {results.legs.map((leg, index) => (
-                  <div key={index} className="flex justify-between items-center p-2 bg-white rounded">
-                    <div className="flex-1">
-                      <span className="font-medium">{leg.market}</span>
-                      {leg.selection && <span className="text-gray-600 ml-2">- {leg.selection}</span>}
-                    </div>
-                    <div className="flex gap-4 text-sm">
-                      <span>DraftKings: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
-                      <span>Pinnacle: {leg.pinnacleOdds > 0 ? '+' : ''}{leg.pinnacleOdds}</span>
-                      <span className={leg.individualEdge > 0 ? 'text-green-600' : 'text-red-600'}>
-                        Edge: {leg.individualEdge}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+    <div key={index} className="flex justify-between items-center p-2 bg-white rounded">
+      <div className="flex-1">
+        <span className="font-medium">{leg.market}</span>
+        {leg.selection && <span className="text-gray-600 ml-2">- {leg.selection}</span>}
+      </div>
+      <div className="flex gap-4 text-sm">
+        <span>DraftKings: {leg.boostedOdds > 0 ? '+' : ''}{leg.boostedOdds}</span>
+        <span>Pinnacle: {leg.pinnacleOdds > 0 ? '+' : ''}{leg.pinnacleOdds}</span>
+        <span className={leg.individualEdge > 0 ? 'text-green-600' : 'text-red-600'}>
+          Edge: {leg.individualEdge}%
+        </span>
+      </div>
+    </div>
+  ))}
+</div>
               
               {/* Show parlay-level fair value */}
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1132,5 +1177,3 @@ const EVParlayCalculator = () => {
 };
 
 export default EVParlayCalculator;
-
-
