@@ -1,5 +1,6 @@
 [build]
-  publish = "build"
+  base = "ev-Parlay-Calculator"
+  publish = "dist"
   command = "npm run build"
 
 [[redirects]]
